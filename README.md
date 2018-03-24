@@ -1,13 +1,6 @@
+**Please use @alogic0’s fork at <https://github.com/alogic0/lucid-from-html>.**
+
 ---
-title:  lucid-from-html  
-author: David Baynard  
-date:   05 May 2017  
-fontfamily:   libertine
-csl:    chemical-engineering-science.csl
-link-citations: true
-abstract: |  
-    
-...
 
 This repository hosts the code to the `lucid-from-html` tool, derived from [@jaspervdj](https://github.com/jaspervdj).
 It is quite rough, and doubtless many examples do not work.
