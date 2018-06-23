@@ -3,7 +3,7 @@
 -- see: https://github.com/sol/hpack
 
 name:          lucid-from-html
-version:       0.1.0.1
+version:       0.2.0
 synopsis:      Tool to convert HTML to Lucid code.
 description:   Tool that converts HTML files to Haskell code, ready to be
                used with the Lucid library.
@@ -19,8 +19,8 @@ build-type:    Simple
 cabal-version: >= 1.10
 
 extra-source-files:
-  ../CHANGELOG.md
-  ../README.md
+  CHANGELOG.md
+  README.md
 
 source-repository head
   type: git
@@ -29,13 +29,12 @@ source-repository head
 library
   hs-source-dirs:
     src
-  ghc-options: -pgmL markdown-unlit
+  ghc-options: -Wall
   build-depends:
     base >=4 && <5,
     containers >=0.3,
     directory >=1.0,
     filepath >=1.1,
-    markdown-unlit >= 0.4.0,
     tagsoup >=0.10
   exposed-modules:
     Lucid.Generate
@@ -46,15 +45,14 @@ library
   default-language: Haskell2010
 
 executable lucid-from-html
-  main-is: Main.lhs
+  main-is: Main.hs
   hs-source-dirs:
     app
-  ghc-options: -pgmL markdown-unlit -Wall
+  ghc-options: -Wall
   build-depends:
     base >=4 && <5,
     containers >=0.3,
     directory >=1.0,
     filepath >=1.1,
-    markdown-unlit >= 0.4.0,
     lucid-from-html
   default-language: Haskell2010

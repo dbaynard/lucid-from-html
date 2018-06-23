@@ -1,15 +1,3 @@
----
-title:  Sanitize html input  
-author: David Baynard  
-date:   04 May 2017  
-fontfamily:   libertine
-csl:    chemical-engineering-science.csl
-link-citations: true
-abstract: |  
-    
-...
-
-```haskell
 {-# LANGUAGE PackageImports #-}
 
 -- | A program to sanitize an HTML tag to a Haskell function.
@@ -31,7 +19,7 @@ import "base" Data.Char (toLower, toUpper)
 --
 sanitize :: String -> String
 sanitize str
-    | lower  == "doctypehtml" = "docTypeHtml_"
+    | lower == "tt" = "code_"
     | otherwise               = appendUnderscore $ removeDash lower
   where
     lower = map toLower str
@@ -48,4 +36,3 @@ sanitize str
 
     appendUnderscore = (++ "_")
 
-```

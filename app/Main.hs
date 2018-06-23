@@ -1,15 +1,3 @@
----
-title:  Lucid from html  
-author: David Baynard  
-date:   04 May 2017  
-fontfamily:   libertine
-csl:    chemical-engineering-science.csl
-link-citations: true
-abstract: |  
-    
-...
-
-```haskell
 {-# LANGUAGE PackageImports #-}
 
 module Main (
@@ -19,15 +7,12 @@ module Main (
 import "base" Control.Monad (forM_, when)
 import "base" Control.Applicative ((<$>))
 import "base" System.Environment (getArgs)
-import "base" Data.Maybe (listToMaybe, fromMaybe)
-import "filepath" System.FilePath (dropExtension)
-import qualified "containers" Data.Map as M
+-- import "filepath" System.FilePath (takeFileName)
 import "base" System.Console.GetOpt
 import "base" System.Exit
 import "base" System.IO
 
 import Lucid.Generate
-import Lucid.Combinators
 
 -- | Main function
 --
@@ -40,27 +25,29 @@ main = do
         | not (null errs) -> do hPutStr stderr (concat errs)
                                 hPutStrLn stderr "use -h for usage help"
                                 exitFailure
-        | otherwise       -> let v = getVariant o
-                                 s = standalone' o
-                                 i = ignore' o
+        | otherwise       -> let i = ignore' o
                                  t = trim' o
                                  opts = Options i t
-                             in do imports' v o
-                                   main' v s opts n
+                             in do imports' o
+                                   main' opts n
   where
     -- No files given, work with stdin
-    main' variant standalone opts [] = interact $
-        lucidFromHtml variant standalone opts "template"
+    main' opts [] = interact $
+        lucidFromHtml opts "template1"
 
     -- Handle all files
-    main' variant standalone opts files = forM_ files $ \file -> do
+    main' opts files = forM_ (zip files [1 .. (length files)]) $ \(file, num) -> do
         body <- readFile file
-        putStrLn $ lucidFromHtml variant standalone opts
-                                 (dropExtension file) body
+        putStrLn $ "-- Template for file: " ++ file
+        putStrLn $ lucidFromHtml opts
+                                 ("template" ++ (show num)) body
 
     -- Print imports if needed
-    imports' variant opts = when (standalone' opts) $
-        putStrLn $ unlines $ getImports variant
+    imports' opts = when (standalone' opts) $
+        putStrLn $ unlines $ getImports 
+                              ++ getExtraImports
+                              ++ getIOImports ++ [""]
+                              ++ getExtraFunctions
 
     -- Should we produce standalone code?
     standalone' opts = ArgStandalone `elem` opts
@@ -71,16 +58,12 @@ main = do
     -- Should we trim whitespace from text?
     trim' opts = ArgNoTrimText `elem` opts
 
-    -- Get the variant from the options
-    getVariant opts = fromMaybe defaultHtmlVariant $ listToMaybe $
-        flip concatMap opts $ \o -> case o of (ArgHtmlVariant x) -> [x]
-                                              _ -> []
 
 -- | Help information.
 --
 help :: String
 help = unlines $
-    [ "This is a tool to convert HTML code to LucidHtml code. It is still"
+    [ "This is a tool to convert HTML5 code to LucidHtml code. It is still"
     , "experimental and the results might need to be edited manually."
     , ""
     , "USAGE"
@@ -91,24 +74,19 @@ help = unlines $
     , ""
     , "EXAMPLE"
     , ""
-    , "  lucid-from-html -v html4-strict index.html"
+    , "  lucid-from-html -s index.html"
     , ""
     , "This converts the index.html file to Haskell code, writing to stdout."
     , ""
     , "OPTIONS"
     , usageInfo "" options
-    , "VARIANTS"
     , ""
-    ] ++
-    map (("  " ++) . fst) (M.toList htmlVariants) ++
-    [ ""
-    , "By default, " ++ show defaultHtmlVariant ++ " is used."
+    , "Note: Tag <tt> in input file is allowed and will be converted to <code>."
     ]
 
 -- | Options for the CLI program
 --
-data Arg = ArgHtmlVariant HtmlVariant
-         | ArgStandalone
+data Arg = ArgStandalone
          | ArgIgnoreErrors
          | ArgNoTrimText
          | ArgHelp
@@ -118,19 +96,9 @@ data Arg = ArgHtmlVariant HtmlVariant
 --
 options :: [OptDescr Arg]
 options =
-    [ Option "v" ["html-variant"] htmlVariantOption "HTML variant to use"
-    , Option "s" ["standalone"] (NoArg ArgStandalone) "Produce standalone code"
+    [ Option "s" ["standalone"] (NoArg ArgStandalone) "Produce standalone code"
     , Option "e" ["ignore-errors"] (NoArg ArgIgnoreErrors) "Ignore most errors"
     , Option "t" ["no-trim-text"]  (NoArg ArgNoTrimText) "Do not trim text"
     , Option "h" ["help"] (NoArg ArgHelp) "Show help"
     ]
-  where
-    htmlVariantOption = flip ReqArg "VARIANT" $ \name -> ArgHtmlVariant $
-        fromMaybe (error $ "No HTML variant called " ++ name ++ " found.")
-                  (M.lookup name htmlVariants)
 
--- | The default HTML variant
---
-defaultHtmlVariant :: HtmlVariant
-defaultHtmlVariant = html5
-```

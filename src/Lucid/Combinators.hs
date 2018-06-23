@@ -1,15 +1,3 @@
----
-title:  Html combinators  
-author: David Baynard  
-date:   04 May 2017  
-fontfamily:   libertine
-csl:    chemical-engineering-science.csl
-link-citations: true
-abstract: |  
-    
-...
-
-```haskell
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE CPP #-}
 
@@ -21,13 +9,10 @@ module Lucid.Combinators (
     module Lucid.Combinators
 )   where
 
-import "base" Control.Arrow ((&&&))
 import "base" Data.List (sortBy, intersperse, intercalate)
 import "base" Data.Ord (comparing)
 import "directory" System.Directory (createDirectoryIfMissing)
 import "filepath" System.FilePath ((</>), (<.>))
-import "containers" Data.Map (Map)
-import qualified "containers" Data.Map as M
 import "base" Data.Char (toLower)
 
 import Lucid.Sanitize (sanitize)
@@ -45,9 +30,6 @@ data HtmlVariant = HtmlVariant
 
 instance Show HtmlVariant where
     show = map toLower . intercalate "-" . version
-
-printVariants :: IO ()
-printVariants = mapM_ (writeHtmlVariant . snd) $ M.toList htmlVariants
 
 -- | Get the full module name for an HTML variant.
 --
@@ -143,7 +125,7 @@ makeDocType lines' = unlines
     , "-- Result:"
     , "--"
     , unlines (map ("-- > " ++) lines') ++ "--"
-    , "docType_ :: Html  -- ^ The document type HTML."
+    , "docType_ :: Html ()  -- ^ The document type HTML."
     , "docType_ = preEscapedText " ++ show (unlines lines')
     , "{-# INLINE docType_ #-}"
     ]
@@ -165,7 +147,7 @@ makeDocTypeHtml lines' = unlines
     , "--"
     , unlines (map ("-- > " ++) lines') ++ "-- > <html><span>foo</span></html>"
     , "--"
-    , "docTypeHtml_ :: Html  -- ^ Inner HTML."
+    , "docTypeHtml_ :: Html ()  -- ^ Inner HTML."
     , "             -> Html  -- ^ Resulting HTML."
     , "docTypeHtml_ inner = docType_ >> html_ inner"
     , "{-# INLINE docTypeHtml_ #-}"
@@ -274,7 +256,7 @@ html5 = HtmlVariant
         , "link", "menuitem", "meta", "param", "source", "track", "wbr"
         ]
     , attributes =
-        [ "accept", "accept-charset", "accesskey", "action", "alt", "async"
+        [ "accept", "accept-charset", "accesskey", "action", "alt", "aria-hidden", "async"
         , "autocomplete", "autofocus", "autoplay", "challenge", "charset"
         , "checked", "cite", "class", "cols", "colspan", "content"
         , "contenteditable", "contextmenu", "controls", "coords", "data"
@@ -299,8 +281,8 @@ html5 = HtmlVariant
         , "onseeked", "onseeking", "onselect", "onstalled", "onstorage"
         , "onsubmit", "onsuspend", "ontimeupdate", "onundo", "onunload"
         , "onvolumechange", "onwaiting", "open", "optimum", "pattern", "ping"
-        , "placeholder", "preload", "pubdate", "radiogroup", "readonly", "rel"
-        , "required", "reversed", "rows", "rowspan", "sandbox", "scope"
+        , "placeholder", "preload", "property", "pubdate", "radiogroup", "readonly"
+        , "rel", "required", "reversed", "rows", "rowspan", "sandbox", "scope"
         , "scoped", "seamless", "selected", "shape", "size", "sizes", "span"
         , "spellcheck", "src", "srcdoc", "start", "step", "style", "subject"
         , "summary", "tabindex", "target", "title", "type", "usemap", "value"
@@ -308,26 +290,4 @@ html5 = HtmlVariant
         ]
     , selfClosing = False
     }
-
--- | XHTML 5.0
---
-xhtml5 :: HtmlVariant
-xhtml5 = HtmlVariant
-    { version = ["XHtml5"]
-    , docType = ["<!DOCTYPE HTML>"]
-    , parents = parents html5
-    , leafs = leafs html5
-    , attributes = attributes html5
-    , selfClosing = True
-    }
-
-
--- | A map of HTML variants, per version, lowercase.
--- Lucid only supports html5 and xhtml5.
-htmlVariants :: Map String HtmlVariant
-htmlVariants = M.fromList $ map (show &&& id)
-    [ html5
-    , xhtml5
-    ]
-```
 

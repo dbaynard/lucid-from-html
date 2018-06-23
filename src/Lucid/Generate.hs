@@ -1,15 +1,3 @@
----
-title:  Generate Lucid code from html  
-author: David Baynard  
-date:   04 May 2017  
-fontfamily:   libertine
-csl:    chemical-engineering-science.csl
-link-citations: true
-abstract: |  
-    
-...
-
-```haskell
 {-# LANGUAGE PackageImports #-}
 
 -- | A module for conversion from HTML to Lucid Haskell code.
@@ -53,31 +41,30 @@ data CombinatorType = ParentCombinator
 -- | Traverse the list of tags to produce an intermediate representation of the
 -- HTML tree.
 --
-makeTree :: HtmlVariant           -- ^ HTML variant used
-         -> Bool                  -- ^ Should ignore errors
+makeTree :: Bool                  -- ^ Should ignore errors
          -> [String]              -- ^ Stack of open tags
          -> [Tag String]          -- ^ Tags to parse
          -> (Html, [Tag String])  -- ^ (Result, unparsed part)
-makeTree _ ignore stack []
+makeTree ignore stack []
     | null stack || ignore = (Block [], [])
     | otherwise = error $ "Error: tags left open at the end: " ++ show stack
-makeTree variant ignore stack (TagPosition row _ : x : xs) = case x of
+makeTree ignore stack (TagPosition row _ : x : xs) = case x of
     TagOpen tag attrs -> if toLower' tag == "!doctype"
         then addHtml Doctype xs
         else let tag' = toLower' tag
-                 (inner, t) = case combinatorType variant tag' of
+                 (inner, t) = case combinatorType tag' of
                     LeafCombinator -> (Block [], xs)
-                    _ -> makeTree variant ignore (tag' : stack) xs
+                    _ -> makeTree ignore (tag' : stack) xs
                  p = Parent tag' (map (first toLower') attrs) inner
              in addHtml p t
     -- The closing tag must match the stack. If it is a closing leaf, we can
     -- ignore it
     TagClose tag ->
-        let isLeafCombinator = combinatorType variant tag == LeafCombinator
+        let isLeafCombinator = combinatorType tag == LeafCombinator
             matchesStack = listToMaybe stack == Just (toLower' tag)
         in case (isLeafCombinator, matchesStack, ignore) of
             -- It's a leaf combinator, don't care about this element
-            (True, _, _)          -> makeTree variant ignore stack xs
+            (True, _, _)          -> makeTree ignore stack xs
             -- It's a parent and the stack doesn't match
             (False, False, False) -> error $
                 "Line " ++ show row ++ ": " ++ show tag ++ " closed but "
@@ -86,13 +73,13 @@ makeTree variant ignore stack (TagPosition row _ : x : xs) = case x of
             (False, _, _)         -> (Block [], xs)
     TagText text -> addHtml (Text text) xs
     TagComment comment -> addHtml (Comment comment) xs
-    _ -> makeTree variant ignore stack xs
+    _ -> makeTree ignore stack xs
   where
-    addHtml html xs' = let (Block l, r) = makeTree variant ignore stack xs'
+    addHtml html xs' = let (Block l, r) = makeTree ignore stack xs'
                        in (Block (html : l), r)
 
     toLower' = map toLower
-makeTree _ _ _ _ = error "TagSoup error"
+makeTree _ _ _ = error "TagSoup error"
 
 -- | Remove empty text from the HTML.
 --
@@ -112,30 +99,28 @@ minimizeBlocks (Parent t a x) = Parent t a $ minimizeBlocks x
 minimizeBlocks (Block x) = Block $ map minimizeBlocks x
 minimizeBlocks x = x
 
--- | Get the type of a combinator, using a given variant.
+-- | Get the type of a combinator
 --
-combinatorType :: HtmlVariant -> String -> CombinatorType
-combinatorType variant combinator
+combinatorType :: String -> CombinatorType
+combinatorType combinator
     | combinator == "docTypeHtml" = ParentCombinator
-    | combinator `elem` parents variant = ParentCombinator
-    | combinator `elem` leafs variant = LeafCombinator
+    | combinator == "tt" = ParentCombinator
+    | combinator `elem` parents html5 = ParentCombinator
+    | combinator `elem` leafs html5 = LeafCombinator
     | otherwise = UnknownCombinator
-
--- | Create a special @<html>@ parent that includes the docype.
---
-joinHtmlDoctype :: Html -> Html
-joinHtmlDoctype (Block (Doctype : Parent "html" attrs inner : xs)) =
-    Block $ Parent "docTypeHtml" attrs inner : xs
-joinHtmlDoctype x = x
 
 -- | Produce the Lucid code from the HTML. The result is a list of lines.
 --
-fromHtml :: HtmlVariant  -- ^ Used HTML variant
-         -> Options      -- ^ Building options
+fromHtml :: Options      -- ^ Building options
          -> Html         -- ^ HTML tree
          -> [String]     -- ^ Resulting lines of code
-fromHtml _ _ Doctype = ["docType"]
-fromHtml _ opts (Text text) = ["\"" ++ concatMap escape (trim text) ++ "\""]
+fromHtml _ Doctype = ["doctype_"]
+fromHtml opts t
+  | (Text text) <- t
+    = ["\"" ++ concatMap escape (trim text) ++ "\""]
+  -- preserve comments as is
+  | (Comment comment) <- t
+    = ["toHtmlRaw  \"<!--" ++ concatMap escape comment ++ "-->\""]
   where
     -- Remove whitespace on both ends of a string
     trim
@@ -144,22 +129,24 @@ fromHtml _ opts (Text text) = ["\"" ++ concatMap escape (trim text) ++ "\""]
     -- Escape a number of characters
     escape '"'  = "\\\""
     escape '\n' = "\\n"
+    escape '\t' = "\\t"
+    escape '\r' = "\\r"
     escape '\\' = "\\\\"
     escape x    = [x]
-fromHtml _ _ (Comment comment) = map ("-- " ++) $ lines comment
-fromHtml variant opts (Block block) =
-    concatMap (fromHtml variant opts) block
-fromHtml variant opts (Parent tag attrs inner) =
-    case combinatorType variant tag of
+-- fromHtml _ (Comment comment) = map ("-- " ++) $ lines comment
+fromHtml opts (Block block) =
+    concatMap (fromHtml opts) block
+fromHtml opts (Parent tag attrs inner) =
+    case combinatorType tag of
         -- Actual parent tags
         ParentCombinator -> case inner of
             (Block ls) -> if null ls
                 then [combinator ++
-                        (if null attrs then " " else " $ ") ++ "mempty"]
+                        (if null attrs then " " else " $ ") ++ "\"\""]
                 else (combinator ++ " $ do") :
-                        indent (fromHtml variant opts inner)
+                        indent (fromHtml opts inner)
             -- We join non-block parents for better readability.
-            x -> let ls = fromHtml variant opts x
+            x -> let ls = fromHtml opts x
                      apply = if dropApply x then " " else " $ "
                  in case ls of (y : ys) -> (combinator ++ apply ++ y) : ys
                                [] -> [combinator]
@@ -169,26 +156,31 @@ fromHtml variant opts (Parent tag attrs inner) =
 
         -- Unknown tag
         UnknownCombinator -> if ignore_ opts
-            then fromHtml variant opts inner
-            else error $ "Tag " ++ tag ++ " is illegal in "
-                                       ++ show variant
+            then fromHtml opts inner
+            else error $ "Tag " ++ tag ++ " is illegal in html5"
   where
     combinator :: String
     combinator = sanitize tag ++ attributes' attrs
     attributes' :: Show a => [(String, a)] -> [Char]
-    attributes' [] = ""
+    -- hack for <br> that need attributes in Lucid
+    attributes' [] = if sanitize tag == "br_" 
+                       then " []"
+                       else ""
     attributes' xs =  (" [ " ++) . (++ " ]") . intercalate ", " . fmap displayAttr $ xs
     displayAttr :: Show a => (String, a) -> String
-    displayAttr (k, v) = case k `elem` attributes variant of
-        True  -> sanitize k ++ " " ++ show v
+    displayAttr (k, v) = case k `elem` attributes html5 of
+        True  -> let k' = sanitize k 
+                 in case k' of 
+                        "autofocus_" -> k'
+                        "checked_" -> k'
+                        _ -> k' ++ " " ++ show v
         False -> case stripPrefix "data-" k of
             Just prefix -> "data_" ++ " "
                         ++ show prefix
                         ++ " " ++ show v
             Nothing | ignore_ opts -> ""
                     | otherwise  -> error $ "Attribute "
-                                 ++ k ++ " is illegal in "
-                                 ++ show variant
+                                 ++ k ++ " is illegal in html5"
 
     -- Check if we can drop the apply operator ($), for readability reasons.
     -- This would change:
@@ -205,36 +197,59 @@ fromHtml variant opts (Parent tag attrs inner) =
 
 -- | Produce the code needed for initial imports.
 --
-getImports :: HtmlVariant -> [String]
-getImports variant =
-    [ "{-# LANGUAGE OverloadedStrings #-}"
+getImports :: [String]
+getImports =
+    [ "{-# LANGUAGE OverloadedStrings, ExtendedDefaultRules #-}"
     , ""
-    , import_ "Data.Monoid (mempty)"
-    , ""
-    , import_ h
+    , "import Lucid"
     ]
-  where
-    import_ = ("import " ++)
-    h = getModuleName variant
+
+-- | Imports for extra functions
+--
+getExtraImports :: [String]
+getExtraImports =
+    [ "import Lucid.Base"
+    , "import Data.Text"
+    ]
+
+-- | Produce the code for IO
+--
+getIOImports :: [String]
+getIOImports = 
+    [ "import System.IO (stdout)"
+    , "import Data.Text.Lazy.IO as L"
+    , ""
+    , "main :: IO ()"
+    , "main = L.hPutStr stdout (renderText template1)"
+    ]
+
+-- | Functions to generate missed attributes
+--
+getExtraFunctions :: [String]
+getExtraFunctions =
+    [ "ariaHidden_ :: Text -> Attribute"
+    , "ariaHidden_ = makeAttribute \"aria-hidden\""
+    , ""
+    , "property_ :: Text -> Attribute"
+    , "property_ = makeAttribute \"property\""
+    ]
+
 
 -- | Convert the HTML to lucid code.
 --
-lucidFromHtml :: HtmlVariant  -- ^ Variant to use
-              -> Bool         -- ^ Produce standalone code
-              -> Options      -- ^ Build options
+lucidFromHtml :: Options      -- ^ Build options
               -> String       -- ^ Template name
               -> String       -- ^ HTML code
               -> String       -- ^ Resulting code
-lucidFromHtml variant standalone opts name =
-    unlines . addSignature . fromHtml variant opts
-            . joinHtmlDoctype . minimizeBlocks
-            . removeEmptyText . fst . makeTree variant (ignore_ opts) []
+lucidFromHtml opts name =
+    unlines . addSignature . fromHtml opts
+            . minimizeBlocks
+            . removeEmptyText . fst . makeTree (ignore_ opts) []
             . parseTagsOptions parseOptions { optTagPosition = True }
   where
-    addSignature body = if standalone then [ name ++ " :: Html"
-                                           , name ++ " = do"
-                                           ] ++ indent body
-                                      else body
+    addSignature body = [ name ++ " :: Html ()"
+                        , name ++ " = do"
+                        ] ++ indent body
 
 -- | Indent block of code.
 --
@@ -249,4 +264,3 @@ data Options = Options
              }
   deriving (Show)
 
-```
